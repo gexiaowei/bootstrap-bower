@@ -2,7 +2,7 @@
  * angular-ui-bootstrap
  * http://angular-ui.github.io/bootstrap/
 
- * Version: 1.2.4 - 2016-03-06
+ * Version: 1.4.0 - 2016-03-18
  * License: MIT
  */angular.module("ui.bootstrap", ["ui.bootstrap.tpls", "ui.bootstrap.collapse","ui.bootstrap.accordion","ui.bootstrap.alert","ui.bootstrap.buttons","ui.bootstrap.carousel","ui.bootstrap.dateparser","ui.bootstrap.isClass","ui.bootstrap.position","ui.bootstrap.datepicker","ui.bootstrap.debounce","ui.bootstrap.dropdown","ui.bootstrap.stackedMap","ui.bootstrap.modal","ui.bootstrap.paging","ui.bootstrap.pager","ui.bootstrap.pagination","ui.bootstrap.tooltip","ui.bootstrap.popover","ui.bootstrap.progressbar","ui.bootstrap.rating","ui.bootstrap.tabs","ui.bootstrap.timepicker","ui.bootstrap.typeahead"]);
 angular.module("ui.bootstrap.tpls", ["uib/template/accordion/accordion-group.html","uib/template/accordion/accordion.html","uib/template/alert/alert.html","uib/template/carousel/carousel.html","uib/template/carousel/slide.html","uib/template/datepicker/datepicker.html","uib/template/datepicker/day.html","uib/template/datepicker/month.html","uib/template/datepicker/popup.html","uib/template/datepicker/year.html","uib/template/modal/backdrop.html","uib/template/modal/window.html","uib/template/pager/pager.html","uib/template/pagination/pagination.html","uib/template/tooltip/tooltip-html-popup.html","uib/template/tooltip/tooltip-popup.html","uib/template/tooltip/tooltip-template-popup.html","uib/template/popover/popover-html.html","uib/template/popover/popover-template.html","uib/template/popover/popover.html","uib/template/progressbar/bar.html","uib/template/progressbar/progress.html","uib/template/progressbar/progressbar.html","uib/template/rating/rating.html","uib/template/tabs/tab.html","uib/template/tabs/tabset.html","uib/template/timepicker/timepicker.html","uib/template/typeahead/typeahead-match.html","uib/template/typeahead/typeahead-popup.html"]);
@@ -174,6 +174,7 @@ angular.module('ui.bootstrap.accordion', ['ui.bootstrap.collapse'])
     },
     scope: {
       heading: '@',               // Interpolate the heading attribute onto this scope
+      panelClass: '@?',           // Ditto with panelClass
       isOpen: '=?',
       isDisabled: '=?'
     },
@@ -2850,11 +2851,17 @@ function($scope, $element, $attrs, $compile, $log, $parse, $window, $document, $
 
   $scope.isDisabled = function(date) {
     if (date === 'today') {
-      date = new Date();
+      date = dateParser.fromTimezone(new Date(), ngModelOptions.timezone);
+    }
+
+    if ($scope.datepickerOptions) {
+      return $scope.datepickerOptions &&
+        $scope.datepickerOptions.minDate && $scope.compare(date, $scope.datepickerOptions.minDate) < 0 ||
+        $scope.datepickerOptions.maxDate && $scope.compare(date, $scope.datepickerOptions.maxDate) > 0;
     }
 
     return $scope.watchData.minDate && $scope.compare(date, cache.minDate) < 0 ||
-        $scope.watchData.maxDate && $scope.compare(date, cache.maxDate) > 0;
+      $scope.watchData.maxDate && $scope.compare(date, cache.maxDate) > 0;
   };
 
   $scope.compare = function(date1, date2) {
@@ -3782,8 +3789,6 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.stackedMap'])
       };
 
       //Modal focus behavior
-      var focusableElementList;
-      var focusIndex = 0;
       var tababbleSelector = 'a[href], area[href], input:not([disabled]), ' +
         'button:not([disabled]),select:not([disabled]), textarea:not([disabled]), ' +
         'iframe, object, embed, *[tabindex], *[contenteditable=true]';
@@ -3914,15 +3919,15 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.stackedMap'])
               break;
             }
             case 9: {
-              $modalStack.loadFocusElementList(modal);
+              var list = $modalStack.loadFocusElementList(modal);
               var focusChanged = false;
               if (evt.shiftKey) {
-                if ($modalStack.isFocusInFirstItem(evt) || $modalStack.isModalFocused(evt, modal)) {
-                  focusChanged = $modalStack.focusLastFocusableElement();
+                if ($modalStack.isFocusInFirstItem(evt, list) || $modalStack.isModalFocused(evt, modal)) {
+                  focusChanged = $modalStack.focusLastFocusableElement(list);
                 }
               } else {
-                if ($modalStack.isFocusInLastItem(evt)) {
-                  focusChanged = $modalStack.focusFirstFocusableElement();
+                if ($modalStack.isFocusInLastItem(evt, list)) {
+                  focusChanged = $modalStack.focusFirstFocusableElement(list);
                 }
               }
 
@@ -3930,6 +3935,7 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.stackedMap'])
                 evt.preventDefault();
                 evt.stopPropagation();
               }
+
               break;
             }
           }
@@ -3999,8 +4005,6 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.stackedMap'])
 
         openedWindows.top().value.modalDomEl = angularDomEl;
         openedWindows.top().value.modalOpener = modalOpener;
-
-        $modalStack.clearFocusListCache();
       };
 
       function broadcastClosing(modalWindow, resultOrReason, closing) {
@@ -4047,16 +4051,17 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.stackedMap'])
         }
       };
 
-      $modalStack.focusFirstFocusableElement = function() {
-        if (focusableElementList.length > 0) {
-          focusableElementList[0].focus();
+      $modalStack.focusFirstFocusableElement = function(list) {
+        if (list.length > 0) {
+          list[0].focus();
           return true;
         }
         return false;
       };
-      $modalStack.focusLastFocusableElement = function() {
-        if (focusableElementList.length > 0) {
-          focusableElementList[focusableElementList.length - 1].focus();
+
+      $modalStack.focusLastFocusableElement = function(list) {
+        if (list.length > 0) {
+          list[list.length - 1].focus();
           return true;
         }
         return false;
@@ -4072,32 +4077,25 @@ angular.module('ui.bootstrap.modal', ['ui.bootstrap.stackedMap'])
         return false;
       };
 
-      $modalStack.isFocusInFirstItem = function(evt) {
-        if (focusableElementList.length > 0) {
-          return (evt.target || evt.srcElement) === focusableElementList[0];
+      $modalStack.isFocusInFirstItem = function(evt, list) {
+        if (list.length > 0) {
+          return (evt.target || evt.srcElement) === list[0];
         }
         return false;
       };
 
-      $modalStack.isFocusInLastItem = function(evt) {
-        if (focusableElementList.length > 0) {
-          return (evt.target || evt.srcElement) === focusableElementList[focusableElementList.length - 1];
+      $modalStack.isFocusInLastItem = function(evt, list) {
+        if (list.length > 0) {
+          return (evt.target || evt.srcElement) === list[list.length - 1];
         }
         return false;
-      };
-
-      $modalStack.clearFocusListCache = function() {
-        focusableElementList = [];
-        focusIndex = 0;
       };
 
       $modalStack.loadFocusElementList = function(modalWindow) {
-        if (focusableElementList === undefined || !focusableElementList.length) {
-          if (modalWindow) {
-            var modalDomE1 = modalWindow.value.modalDomEl;
-            if (modalDomE1 && modalDomE1.length) {
-              focusableElementList = modalDomE1[0].querySelectorAll(tababbleSelector);
-            }
+        if (modalWindow) {
+          var modalDomE1 = modalWindow.value.modalDomEl;
+          if (modalDomE1 && modalDomE1.length) {
+            return modalDomE1[0].querySelectorAll(tababbleSelector);
           }
         }
       };
@@ -5405,6 +5403,7 @@ angular.module('ui.bootstrap.rating', [])
   max: 5,
   stateOn: null,
   stateOff: null,
+  enableReset: true,
   titles : ['one', 'two', 'three', 'four', 'five']
 })
 
@@ -5426,7 +5425,9 @@ angular.module('ui.bootstrap.rating', [])
 
     this.stateOn = angular.isDefined($attrs.stateOn) ? $scope.$parent.$eval($attrs.stateOn) : ratingConfig.stateOn;
     this.stateOff = angular.isDefined($attrs.stateOff) ? $scope.$parent.$eval($attrs.stateOff) : ratingConfig.stateOff;
-    var tmpTitles = angular.isDefined($attrs.titles) ? $scope.$parent.$eval($attrs.titles) : ratingConfig.titles ;
+    this.enableReset = angular.isDefined($attrs.enableReset) ?
+      $scope.$parent.$eval($attrs.enableReset) : ratingConfig.enableReset;
+    var tmpTitles = angular.isDefined($attrs.titles) ? $scope.$parent.$eval($attrs.titles) : ratingConfig.titles;
     this.titles = angular.isArray(tmpTitles) && tmpTitles.length > 0 ?
       tmpTitles : ratingConfig.titles;
 
@@ -5453,7 +5454,8 @@ angular.module('ui.bootstrap.rating', [])
 
   $scope.rate = function(value) {
     if (!$scope.readonly && value >= 0 && value <= $scope.range.length) {
-      ngModelCtrl.$setViewValue(ngModelCtrl.$viewValue === value ? 0 : value);
+      var newViewValue = self.enableReset && ngModelCtrl.$viewValue === value ? 0 : value;
+      ngModelCtrl.$setViewValue(newViewValue);
       ngModelCtrl.$render();
     }
   };
@@ -5509,18 +5511,22 @@ angular.module('ui.bootstrap.tabs', [])
     oldIndex;
   ctrl.tabs = [];
 
-  ctrl.select = function(index) {
+  ctrl.select = function(index, evt) {
     if (!destroyed) {
       var previousIndex = findTabIndex(oldIndex);
       var previousSelected = ctrl.tabs[previousIndex];
       if (previousSelected) {
-        previousSelected.tab.onDeselect();
+        previousSelected.tab.onDeselect({
+          $event: evt
+        });
         previousSelected.tab.active = false;
       }
 
       var selected = ctrl.tabs[index];
       if (selected) {
-        selected.tab.onSelect();
+        selected.tab.onSelect({
+          $event: evt
+        });
         selected.tab.active = true;
         ctrl.active = selected.index;
         oldIndex = selected.index;
@@ -5548,7 +5554,9 @@ angular.module('ui.bootstrap.tabs', [])
       return 0;
     });
 
-    if (tab.index === ctrl.active || !angular.isNumber(ctrl.active) && ctrl.tabs.length === 1) {
+    if(tab.active){
+      ctrl.select(tab.index);
+    }else if (tab.index === ctrl.active || !angular.isNumber(ctrl.active) && ctrl.tabs.length === 1) {
       var newActiveIndex = findTabIndex(tab.index);
       ctrl.select(newActiveIndex);
     }
@@ -5624,6 +5632,7 @@ angular.module('ui.bootstrap.tabs', [])
       heading: '@',
       index: '=?',
       classes: '@?',
+      active: '=?',
       onSelect: '&select', //This callback is called in contentHeadingTransclude
                           //once it inserts the tab's content into the dom
       onDeselect: '&deselect'
@@ -5652,7 +5661,7 @@ angular.module('ui.bootstrap.tabs', [])
         scope.classes = '';
       }
 
-      scope.select = function() {
+      scope.select = function(evt) {
         if (!scope.disabled) {
           var index;
           for (var i = 0; i < tabsetCtrl.tabs.length; i++) {
@@ -5662,7 +5671,7 @@ angular.module('ui.bootstrap.tabs', [])
             }
           }
 
-          tabsetCtrl.select(index);
+          tabsetCtrl.select(index, evt);
         }
       };
 
@@ -6721,6 +6730,9 @@ angular.module('ui.bootstrap.typeahead', ['ui.bootstrap.debounce', 'ui.bootstrap
       }
       if (!isEditable && modelCtrl.$error.editable) {
         modelCtrl.$viewValue = '';
+        // Reset validity as we are clearing
+        modelCtrl.$setValidity('editable', true);
+        modelCtrl.$setValidity('parse', true);
         element.val('');
       }
       hasFocus = false;
@@ -7149,15 +7161,6 @@ angular.module("uib/template/pager/pager.html", []).run(["$templateCache", funct
     "");
 }]);
 
-angular.module("uib/template/pagination/pager.html", []).run(["$templateCache", function($templateCache) {
-  $templateCache.put("uib/template/pagination/pager.html",
-    "<ul class=\"pager\">\n" +
-    "  <li ng-class=\"{disabled: noPrevious()||ngDisabled, previous: align}\"><a href ng-click=\"selectPage(page - 1, $event)\">{{::getText('previous')}}</a></li>\n" +
-    "  <li ng-class=\"{disabled: noNext()||ngDisabled, next: align}\"><a href ng-click=\"selectPage(page + 1, $event)\">{{::getText('next')}}</a></li>\n" +
-    "</ul>\n" +
-    "");
-}]);
-
 angular.module("uib/template/pagination/pagination.html", []).run(["$templateCache", function($templateCache) {
   $templateCache.put("uib/template/pagination/pagination.html",
     "<ul class=\"pagination\">\n" +
@@ -7289,7 +7292,7 @@ angular.module("uib/template/rating/rating.html", []).run(["$templateCache", fun
 angular.module("uib/template/tabs/tab.html", []).run(["$templateCache", function($templateCache) {
   $templateCache.put("uib/template/tabs/tab.html",
     "<li ng-class=\"[{active: active, disabled: disabled}, classes]\" class=\"uib-tab nav-item\">\n" +
-    "  <a href ng-click=\"select()\" class=\"nav-link\" uib-tab-heading-transclude>{{heading}}</a>\n" +
+    "  <a href ng-click=\"select($event)\" class=\"nav-link\" uib-tab-heading-transclude>{{heading}}</a>\n" +
     "</li>\n" +
     "");
 }]);
@@ -7369,6 +7372,6 @@ angular.module("uib/template/typeahead/typeahead-popup.html", []).run(["$templat
 angular.module('ui.bootstrap.carousel').run(function() {!angular.$$csp().noInlineStyle && !angular.$$uibCarouselCss && angular.element(document).find('head').prepend('<style type="text/css">.ng-animate.item:not(.left):not(.right){-webkit-transition:0s ease-in-out left;transition:0s ease-in-out left}</style>'); angular.$$uibCarouselCss = true; });
 angular.module('ui.bootstrap.position').run(function() {!angular.$$csp().noInlineStyle && !angular.$$uibPositionCss && angular.element(document).find('head').prepend('<style type="text/css">.uib-position-measure{display:block !important;visibility:hidden !important;position:absolute !important;top:-9999px !important;left:-9999px !important;}.uib-position-scrollbar-measure{position:absolute;top:-9999px;width:50px;height:50px;overflow:scroll;}</style>'); angular.$$uibPositionCss = true; });
 angular.module('ui.bootstrap.datepicker').run(function() {!angular.$$csp().noInlineStyle && !angular.$$uibDatepickerCss && angular.element(document).find('head').prepend('<style type="text/css">.uib-datepicker .uib-title{width:100%;}.uib-day button,.uib-month button,.uib-year button{min-width:100%;}.uib-datepicker-popup.dropdown-menu{display:block;float:none;margin:0;}.uib-button-bar{padding:10px 9px 2px;}.uib-left,.uib-right{width:100%}</style>'); angular.$$uibDatepickerCss = true; });
-angular.module('ui.bootstrap.tooltip').run(function() {!angular.$$csp().noInlineStyle && !angular.$$uibTooltipCss && angular.element(document).find('head').prepend('<style type="text/css">[uib-tooltip-popup].tooltip.top-left > .tooltip-arrow,[uib-tooltip-popup].tooltip.top-right > .tooltip-arrow,[uib-tooltip-popup].tooltip.bottom-left > .tooltip-arrow,[uib-tooltip-popup].tooltip.bottom-right > .tooltip-arrow,[uib-tooltip-popup].tooltip.left-top > .tooltip-arrow,[uib-tooltip-popup].tooltip.left-bottom > .tooltip-arrow,[uib-tooltip-popup].tooltip.right-top > .tooltip-arrow,[uib-tooltip-popup].tooltip.right-bottom > .tooltip-arrow,[uib-popover-popup].popover.top-left > .arrow,[uib-popover-popup].popover.top-right > .arrow,[uib-popover-popup].popover.bottom-left > .arrow,[uib-popover-popup].popover.bottom-right > .arrow,[uib-popover-popup].popover.left-top > .arrow,[uib-popover-popup].popover.left-bottom > .arrow,[uib-popover-popup].popover.right-top > .arrow,[uib-popover-popup].popover.right-bottom > .arrow{top:auto;bottom:auto;left:auto;right:auto;margin:0;}[uib-popover-popup].popover,[uib-popover-template-popup].popover{display:block !important;}</style>'); angular.$$uibTooltipCss = true; });
+angular.module('ui.bootstrap.tooltip').run(function() {!angular.$$csp().noInlineStyle && !angular.$$uibTooltipCss && angular.element(document).find('head').prepend('<style type="text/css">[uib-tooltip-popup].tooltip.top-left > .tooltip-arrow,[uib-tooltip-popup].tooltip.top-right > .tooltip-arrow,[uib-tooltip-popup].tooltip.bottom-left > .tooltip-arrow,[uib-tooltip-popup].tooltip.bottom-right > .tooltip-arrow,[uib-tooltip-popup].tooltip.left-top > .tooltip-arrow,[uib-tooltip-popup].tooltip.left-bottom > .tooltip-arrow,[uib-tooltip-popup].tooltip.right-top > .tooltip-arrow,[uib-tooltip-popup].tooltip.right-bottom > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.top-left > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.top-right > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.bottom-left > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.bottom-right > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.left-top > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.left-bottom > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.right-top > .tooltip-arrow,[uib-tooltip-html-popup].tooltip.right-bottom > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.top-left > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.top-right > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.bottom-left > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.bottom-right > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.left-top > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.left-bottom > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.right-top > .tooltip-arrow,[uib-tooltip-template-popup].tooltip.right-bottom > .tooltip-arrow,[uib-popover-popup].popover.top-left > .arrow,[uib-popover-popup].popover.top-right > .arrow,[uib-popover-popup].popover.bottom-left > .arrow,[uib-popover-popup].popover.bottom-right > .arrow,[uib-popover-popup].popover.left-top > .arrow,[uib-popover-popup].popover.left-bottom > .arrow,[uib-popover-popup].popover.right-top > .arrow,[uib-popover-popup].popover.right-bottom > .arrow,[uib-popover-html-popup].popover.top-left > .arrow,[uib-popover-html-popup].popover.top-right > .arrow,[uib-popover-html-popup].popover.bottom-left > .arrow,[uib-popover-html-popup].popover.bottom-right > .arrow,[uib-popover-html-popup].popover.left-top > .arrow,[uib-popover-html-popup].popover.left-bottom > .arrow,[uib-popover-html-popup].popover.right-top > .arrow,[uib-popover-html-popup].popover.right-bottom > .arrow,[uib-popover-template-popup].popover.top-left > .arrow,[uib-popover-template-popup].popover.top-right > .arrow,[uib-popover-template-popup].popover.bottom-left > .arrow,[uib-popover-template-popup].popover.bottom-right > .arrow,[uib-popover-template-popup].popover.left-top > .arrow,[uib-popover-template-popup].popover.left-bottom > .arrow,[uib-popover-template-popup].popover.right-top > .arrow,[uib-popover-template-popup].popover.right-bottom > .arrow{top:auto;bottom:auto;left:auto;right:auto;margin:0;}[uib-popover-popup].popover,[uib-popover-html-popup].popover,[uib-popover-template-popup].popover{display:block !important;}</style>'); angular.$$uibTooltipCss = true; });
 angular.module('ui.bootstrap.timepicker').run(function() {!angular.$$csp().noInlineStyle && !angular.$$uibTimepickerCss && angular.element(document).find('head').prepend('<style type="text/css">.uib-time input{width:50px;}</style>'); angular.$$uibTimepickerCss = true; });
 angular.module('ui.bootstrap.typeahead').run(function() {!angular.$$csp().noInlineStyle && !angular.$$uibTypeaheadCss && angular.element(document).find('head').prepend('<style type="text/css">[uib-typeahead-popup].dropdown-menu{display:block;}</style>'); angular.$$uibTypeaheadCss = true; });
